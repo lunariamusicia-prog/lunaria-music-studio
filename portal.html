@@ -46,7 +46,14 @@ $('openOrder').onclick=openOrder;
 $('requestRevision').onclick=async()=>{if(!currentOrder)return;const feedback=$('feedback').value.trim();const b=$('requestRevision');if(feedback.length<5){msg('revisionMsg','Describe el cambio con al menos 5 caracteres.',true);return}b.disabled=true;try{const result=await call('request_revision',{order_id:currentOrder.id,feedback});if(result.requires_quote){msg('revisionMsg',result.message,true)}else{msg('revisionMsg',`Solicitud registrada. Has utilizado ${result.free_used} de 5 cambios gratuitos.`);$('feedback').value='';const refreshed=await call('open_order',{folio:currentOrder.folio});render(refreshed)}}catch(e){msg('revisionMsg',e.message,true)}finally{b.disabled=false}};
 $('reload').onclick=async()=>{if(!currentOrder)return;try{render(await call('open_order',{folio:currentOrder.folio}))}catch(e){alert(e.message)}};
 $('logout').onclick=async()=>{await sb.auth.signOut();currentOrder=null;show('dashboard',false);show('claim',false);show('login',true)};
-async function init(){const {data:{session}}=await sb.auth.getSession();if(session){show('login',false);show('claim',true);const {data:{user}}=await sb.auth.getUser();if(user?.email)$('email').value=user.email}else{show('login',true);show('claim',false)}}
+const authCallbackPresent = /(?:access_token|refresh_token|code)=/.test(location.hash + '&' + location.search);
+async function init(){
+  const {data:{session}}=await sb.auth.getSession();
+  const {data:{user}}=await sb.auth.getUser();
+  if(user?.email)$('email').value=user.email;
+  if(authCallbackPresent && session){show('login',false);show('claim',true)}
+  else{show('login',true);show('claim',false)}
+}
 init();
 })();
 </script></body></html>
