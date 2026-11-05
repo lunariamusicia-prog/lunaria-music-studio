@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#3C0A0C">
+<title>LUNARIA · Mi pedido</title>
+<style>
+:root{--wine:#3C0A0C;--cream:#F2F1ED;--gold:#B38F6F;--ink:#161616;--muted:#a99d95;--line:rgba(179,143,111,.28);--panel:#211b1a}*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(ellipse at top,#351012 0,#160e0e 58%,#100d0d 100%);color:var(--cream);font:15px/1.55 system-ui,-apple-system,Segoe UI,sans-serif}.wrap{width:min(760px,100%);margin:auto;padding:22px}.brand{text-align:center;font:27px Georgia,serif;letter-spacing:.18em;padding:14px}.brand small{display:block;font:11px system-ui;letter-spacing:.38em;color:var(--gold)}h1,h2{font-family:Georgia,serif;font-weight:400}h1{font-size:34px;margin:28px 0 5px}.muted{color:var(--muted)}.card{background:rgba(33,27,26,.94);border:1px solid var(--line);border-radius:16px;padding:20px;margin:16px 0}.field{margin:12px 0}.field label{display:block;color:var(--gold);font-size:13px;margin-bottom:6px}input,textarea{width:100%;padding:13px;border-radius:9px;border:1px solid #b9a18b;background:#f2f1ed;color:#171313;font:inherit}textarea{min-height:110px;resize:vertical}button{border:1px solid var(--gold);background:var(--gold);color:#1b1210;border-radius:10px;padding:12px 16px;font-weight:700;cursor:pointer}button.secondary{background:transparent;color:var(--cream)}button:disabled{opacity:.5}.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}.notice{padding:13px;border:1px solid var(--line);border-radius:10px;margin:12px 0;white-space:pre-wrap}.error{border-color:#a75d5d;color:#ffd6d6}.hidden{display:none!important}.stat{font:26px Georgia,serif;color:var(--gold)}.pill{display:inline-block;border:1px solid var(--line);border-radius:20px;padding:4px 10px;color:var(--gold);font-size:12px}.audio{width:100%;margin-top:10px}.event{border-left:2px solid var(--gold);padding:8px 12px;margin:10px 0;background:#171313}.event b{display:block}.section-title{font:23px Georgia,serif;color:var(--gold);margin:25px 0 10px}.fine{font-size:12px;color:var(--muted)}a{color:#e4c3a4}footer{text-align:center;color:#8f8179;font-size:12px;padding:25px}
+</style></head>
+<body><main class="wrap">
+<div class="brand">LUNARIA<small>AI MUSIC STUDIO</small></div>
+<h1>Tu canción, en cada etapa.</h1><p class="muted">Consulta el avance de tu pedido, escucha tu vista previa y solicita cambios desde un espacio privado.</p>
+<section id="login" class="card"><h2>Acceso de cliente</h2><p class="muted">Escribe el correo que utilizaste al solicitar tu canción. Te enviaremos un enlace de acceso.</p><div class="field"><label for="email">Correo electrónico</label><input id="email" type="email" autocomplete="email" placeholder="tu@correo.com" required></div><button id="sendLink">Enviar enlace seguro</button><div id="loginMsg" class="notice hidden" role="status"></div></section>
+<section id="claim" class="card hidden"><h2>Vincular mi pedido</h2><p class="muted">Después de abrir el enlace recibido en tu correo, escribe el folio de tu solicitud. El sistema verificará que el correo de tu sesión sea el mismo registrado en el pedido.</p><div class="field"><label for="folio">Folio del pedido</label><input id="folio" placeholder="Ej. LUN-261105-XXXXXXXX" autocomplete="off"></div><button id="openOrder">Consultar mi pedido</button><div id="claimMsg" class="notice hidden" role="status"></div></section>
+<section id="dashboard" class="hidden">
+<div class="card"><div class="row" style="justify-content:space-between"><div><span class="muted">Folio</span><h2 id="orderFolio" style="margin:3px 0"></h2></div><span id="orderStatus" class="pill"></span></div><div id="orderSummary" class="muted"></div></div>
+<div class="card"><h2 class="section-title">Vista previa</h2><div id="previews"><p class="muted">Todavía no hay una vista previa publicada.</p></div><div id="finalBox" class="hidden"></div></div>
+<div class="card"><h2 class="section-title">Cambios incluidos</h2><div class="stat" id="revisionCount">0 de 5</div><p class="muted" id="revisionText">Cambios gratuitos utilizados.</p><div id="revisionForm"><div class="field"><label for="feedback">¿Qué te gustaría cambiar?</label><textarea id="feedback" maxlength="3000" placeholder="Describe con detalle el ajuste que necesitas..."></textarea></div><button id="requestRevision">Solicitar cambio gratuito</button></div><div id="revisionMsg" class="notice hidden"></div><div id="revisionHistory"></div></div>
+<div class="card"><h2 class="section-title">Historial de tu pedido</h2><div id="events"><p class="muted">Sin movimientos visibles todavía.</p></div></div>
+<div class="row"><button id="reload" class="secondary">Actualizar pedido</button><button id="logout" class="secondary">Cerrar sesión</button></div>
+</section>
+<footer>Acceso privado · LUNARIA AI MUSIC STUDIO</footer></main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+(()=>{'use strict';
+const URL='https://jqbwtuwljwqsfnsvtnzkg.supabase.co';
+const KEY='sb_publishable_u8w-v7y-djJkPOtw_YTYRw_LM9NpcqW';
+const FUNCTION_URL=URL+'/functions/v1/lunaria-customer-portal';
+const sb=window.supabase.createClient(URL,KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
+const $=id=>document.getElementById(id);let currentOrder=null;
+const safe=v=>String(v??'—').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const show=(id,on)=>$(id).classList.toggle('hidden',!on);
+const msg=(id,t,bad=false)=>{$(id).textContent=t;$(id).classList.toggle('error',bad);show(id,true)};
+const date=v=>v?new Date(v).toLocaleString('es-MX',{dateStyle:'medium',timeStyle:'short'}):'—';
+async function call(action,extra={}){const {data:{session}}=await sb.auth.getSession();if(!session)throw Error('Tu sesión expiró. Solicita un nuevo enlace de acceso.');const res=await fetch(FUNCTION_URL,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+session.access_token,'apikey':KEY},body:JSON.stringify({action,...extra})});const data=await res.json().catch(()=>({error:'Respuesta inválida del servidor.'}));if(!res.ok)throw Error(data.error||'No fue posible completar la solicitud.');return data}
+function render(data){currentOrder=data.order;show('login',false);show('claim',false);show('dashboard',true);$('orderFolio').textContent=data.order.folio;$('orderStatus').textContent=data.order.status;$('orderSummary').textContent=`Para ${data.order.recipient||'—'} · ${data.order.occasion||'—'} · ${data.order.package_name||'—'} · $${data.order.price_mxn} MXN`;
+const p=$('previews');p.innerHTML=(data.previews||[]).length?data.previews.map(x=>`<div class="event"><b>${safe(x.name||'Vista previa')}</b><div class="fine">Publicada: ${date(x.created_at)}</div><audio class="audio" controls preload="none" src="${safe(x.url)}"></audio></div>`).join(''):'<p class="muted">Todavía no hay una vista previa publicada.</p>';
+if(data.final_audio){$('finalBox').innerHTML=`<h3>Audio final</h3><p>${safe(data.final_audio.name)}</p><audio class="audio" controls src="${safe(data.final_audio.url)}"></audio><p class="fine">El enlace es privado y temporal.</p>`;show('finalBox',true)}else show('finalBox',false);
+$('revisionCount').textContent=`${data.free_used} de 5`;$('revisionText').textContent=`${data.free_remaining} cambios gratuitos restantes. Las rondas no se reinician al aprobar versiones.`;
+show('revisionForm',data.free_remaining>0);if(data.free_remaining===0)$('revisionText').textContent='Tus cinco cambios gratuitos ya fueron utilizados. Para un cambio adicional se requiere cotización y aceptación previa.';
+$('revisionHistory').innerHTML=(data.revisions||[]).map(r=>`<div class="event"><b>Solicitud ${safe(r.revision_number)} · ${safe(r.status)}${r.is_free?' · Gratuita':' · Extra'}</b><div>${safe(r.customer_feedback)}</div><div class="fine">${date(r.created_at)}</div></div>`).join('')||'<p class="muted">Todavía no hay cambios solicitados.</p>';
+$('events').innerHTML=(data.events||[]).map(e=>`<div class="event"><b>${safe(e.event_type)}</b><div>${safe(e.message)}</div><div class="fine">${date(e.created_at)}</div></div>`).join('')||'<p class="muted">Sin movimientos visibles todavía.</p>';
+}
+async function openOrder(){const btn=$('openOrder');btn.disabled=true;try{const data=await call('open_order',{folio:$('folio').value.trim()});render(data)}catch(e){msg('claimMsg',e.message,true)}finally{btn.disabled=false}}
+$('sendLink').onclick=async()=>{const email=$('email').value.trim();if(!email||!$('email').checkValidity()){msg('loginMsg','Escribe un correo válido.',true);return}const b=$('sendLink');b.disabled=true;try{const {error}=await sb.auth.signInWithOtp({email,options:{emailRedirectTo:location.href.split('?')[0]}});if(error)throw error;msg('loginMsg','Si el correo es válido, recibirás un enlace de acceso. Ábrelo en este mismo navegador y vuelve a esta página. Revisa también spam.')}catch(e){msg('loginMsg',e.message,true)}finally{b.disabled=false}};
+$('openOrder').onclick=openOrder;
+$('requestRevision').onclick=async()=>{if(!currentOrder)return;const feedback=$('feedback').value.trim();const b=$('requestRevision');if(feedback.length<5){msg('revisionMsg','Describe el cambio con al menos 5 caracteres.',true);return}b.disabled=true;try{const result=await call('request_revision',{order_id:currentOrder.id,feedback});if(result.requires_quote){msg('revisionMsg',result.message,true)}else{msg('revisionMsg',`Solicitud registrada. Has utilizado ${result.free_used} de 5 cambios gratuitos.`);$('feedback').value='';const refreshed=await call('open_order',{folio:currentOrder.folio});render(refreshed)}}catch(e){msg('revisionMsg',e.message,true)}finally{b.disabled=false}};
+$('reload').onclick=async()=>{if(!currentOrder)return;try{render(await call('open_order',{folio:currentOrder.folio}))}catch(e){alert(e.message)}};
+$('logout').onclick=async()=>{await sb.auth.signOut();currentOrder=null;show('dashboard',false);show('claim',false);show('login',true)};
+async function init(){const {data:{session}}=await sb.auth.getSession();if(session){show('login',false);show('claim',true);const {data:{user}}=await sb.auth.getUser();if(user?.email)$('email').value=user.email}else{show('login',true);show('claim',false)}}
+init();
+})();
+</script></body></html>

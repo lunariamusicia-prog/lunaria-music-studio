@@ -47,7 +47,7 @@
 </section><footer>Acceso protegido · LUNARIA AI MUSIC STUDIO</footer></main>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script>
 (()=>{'use strict';
-const SUPABASE_URL='https://jqbwtulwjqsnfswtmzkg.supabase.co';
+const SUPABASE_URL='https://jqbwtuwljwqsfnsvtnzkg.supabase.co';
 const SUPABASE_KEY='sb_publishable_u8w-v7y-djJkPOtw_YTYRw_LM9NpcqW';
 const $=id=>document.getElementById(id);let client,rows=[],activeOrder=null;
 const statuses=[['new','Nuevo'],['awaiting_payment','Esperando pago'],['paid','Pagado'],['assigned','Asignado'],['writing','Redacción'],['production','Producción'],['preview_ready','Vista previa lista'],['revision_requested','Revisión solicitada'],['finalizing','Finalizando'],['delivered','Entregado'],['completed','Completado'],['cancelled','Cancelado']];
@@ -69,8 +69,67 @@ const revHtml=revs.error?'<div class="muted">No se pudo consultar revisiones.</d
 $('detail').innerHTML=`<div class="detail-head"><div><span class="muted">Detalle del pedido</span><h2 style="margin:2px 0;font:25px Georgia,serif">${safe(o.folio||o.id)}</h2></div><button id="closeDetail" class="secondary">Cerrar</button></div>
 <div class="detail-grid">${field('Cliente',o.customer_name)}${field('Correo',o.customer_email)}${field('Teléfono',o.customer_phone)}${field('Destinatario',o.recipient)}${field('Ocasión',o.occasion)}${field('Paquete',o.package_name||o.package_code)}${field('Precio',`$${o.price_mxn??'—'} MXN`)}${field('Tipo de material',o.material_type)}${field('Género / estilo',o.genre)}${field('Preferencia de voz',o.voice_preference)}${field('Referencia musical',o.musical_reference,true)}${field('Historia / letra',o.story,true)}${field('Detalles importantes',o.important_details,true)}${field('Notas del cliente',o.customer_notes,true)}${field('Fecha de solicitud',date(o.created_at))}${field('Fecha límite',date(o.due_at))}</div>
 <h3 class="subhead">Actualizar pedido</h3><div class="actions"><div class="field"><label for="editStatus">Estado del pedido</label><select id="editStatus">${opts(statuses,o.status)}</select></div><div class="field"><label for="editPayment">Estado del pago</label><select id="editPayment">${opts(payments,o.payment_status)}</select></div><button id="saveChanges">Guardar cambios</button></div><div id="detailMessage" class="notice hidden"></div>
-<h3 class="subhead">Archivos adjuntos</h3><div class="history">${fileHtml}</div><h3 class="subhead">Revisiones</h3><div class="history">${revHtml}</div><h3 class="subhead">Historial de movimientos</h3><div class="history">${eventHtml}</div>`;
+<h3 class="subhead">Vista previa de audio</h3>
+<div class="actions">
+  <div class="field full"><label for="previewFile">Seleccionar audio de vista previa (MP3, WAV, M4A)</label><input id="previewFile" type="file" accept="audio/mpeg,audio/wav,audio/mp4,audio/x-m4a,.mp3,.wav,.m4a"></div>
+  <button id="uploadPreview">Subir y publicar vista previa</button>
+</div>
+<div id="previewMessage" class="notice hidden"></div>
+<div id="previewPlayer" class="history"></div>
+<p class="muted">El archivo se guarda en el bucket privado. Esta acción lo registra como vista previa visible para el cliente y cambia el pedido a “Vista previa lista”. El portal del cliente todavía debe quedar vinculado de forma segura al pedido antes de habilitar su reproducción.</p>
+<h3 class="subhead">Archivos adjuntos</h3><div class="history">${fileHtml}</div><h3 class="subhead">Revisiones</h3><p id="revisionUsage" class="muted"></p><div class="history">${revHtml}</div><h3 class="subhead">Historial de movimientos</h3><div class="history">${eventHtml}</div>`;
+const used=(revs.data||[]).filter(r=>r.is_free!==false).length;
+const usage=$('revisionUsage');if(usage)usage.textContent=`${used} de 5 cambios gratuitos utilizados · ${Math.max(0,5-used)} restantes. Las rondas no se reinician al aprobar una versión. A partir del sexto cambio se requiere cotización y aceptación previa.`;
+$('uploadPreview').onclick=uploadPreview;
+const latestPreview=(files.data||[]).find(f=>f.file_kind==='preview');
+if(latestPreview) showPreview(latestPreview);
 $('closeDetail').onclick=()=>show('detail',false);$('saveChanges').onclick=saveChanges;
+}
+async function showPreview(fileRow){
+  const box=$('previewPlayer'); if(!box)return;
+  const {data,error}=await client.storage.from(fileRow.bucket_id||'lunaria-private').createSignedUrl(fileRow.object_path,3600);
+  if(error){box.innerHTML=`<div class="notice error">No se pudo generar el enlace privado de reproducción: ${safe(error.message)}</div>`;return;}
+  box.innerHTML=`<div class="event"><b>Vista previa cargada: ${safe(fileRow.original_filename)}</b><audio controls preload="none" style="width:100%;margin-top:10px" src="${safe(data.signedUrl)}"></audio><div class="muted">Enlace temporal de administración · expira en 60 minutos.</div></div>`;
+}
+async function uploadPreview(){
+  if(!activeOrder)return;
+  const input=$('previewFile'),file=input.files?.[0],btn=$('uploadPreview'),msg=$('previewMessage');
+  if(!file){msg.textContent='Selecciona primero un archivo de audio.';msg.classList.add('error');show('previewMessage',true);return;}
+  const allowed=['audio/mpeg','audio/wav','audio/mp4','audio/x-m4a'];
+  const ext=(file.name.split('.').pop()||'').toLowerCase();
+  if(!(allowed.includes(file.type)||['mp3','wav','m4a'].includes(ext))){msg.textContent='Formato no permitido. Usa MP3, WAV o M4A.';msg.classList.add('error');show('previewMessage',true);return;}
+  if(file.size>50*1024*1024){msg.textContent='El archivo supera el límite de 50 MB del bucket.';msg.classList.add('error');show('previewMessage',true);return;}
+  btn.disabled=true;btn.textContent='Subiendo…';show('previewMessage',false);
+  const cleanName=file.name.replace(/[^a-zA-Z0-9._-]/g,'_');
+  const path=`${activeOrder.id}/preview/${Date.now()}_${cleanName}`;
+  const {data:uploadData,error:uploadError}=await client.storage.from('lunaria-private').upload(path,file,{contentType:file.type||'audio/mpeg',upsert:false});
+  if(uploadError){msg.textContent='No se pudo subir el audio: '+uploadError.message;msg.classList.add('error');show('previewMessage',true);btn.disabled=false;btn.textContent='Subir y publicar vista previa';return;}
+  const {data:userData}=await client.auth.getUser();
+  const {data:row,error:rowError}=await client.from('order_files').insert({
+    order_id:activeOrder.id,uploaded_by:userData?.user?.id||null,file_kind:'preview',
+    bucket_id:'lunaria-private',object_path:path,original_filename:file.name,
+    content_type:file.type||'audio/mpeg',size_bytes:file.size,is_customer_visible:true
+  }).select('*').single();
+  if(rowError){
+    await client.storage.from('lunaria-private').remove([path]);
+    msg.textContent='El audio se subió, pero no se pudo registrar. Se eliminó el archivo para evitar dejarlo huérfano: '+rowError.message;
+    msg.classList.add('error');show('previewMessage',true);btn.disabled=false;btn.textContent='Subir y publicar vista previa';return;
+  }
+  const {error:statusError}=await client.from('orders').update({status:'preview_ready',updated_at:new Date().toISOString()}).eq('id',activeOrder.id);
+  const {error:eventError}=await client.from('order_events').insert({
+    order_id:activeOrder.id,event_type:'preview_uploaded',
+    message:'Se publicó una vista previa de audio para revisión.',
+    visible_to_customer:true,metadata:{file_id:row.id,filename:file.name}
+  });
+  await showPreview(row);
+  msg.textContent=statusError
+    ?'La vista previa se guardó, pero no se pudo actualizar el estado del pedido: '+statusError.message
+    :eventError
+      ?'La vista previa se guardó y el estado se actualizó, pero no se pudo registrar el historial: '+eventError.message
+      :'Vista previa cargada y registrada. El reproductor administrativo usa un enlace temporal privado.';
+  msg.classList.toggle('error',!!(statusError||eventError));show('previewMessage',true);
+  btn.disabled=false;btn.textContent='Subir y publicar vista previa';input.value='';
+  await load();
 }
 async function saveChanges(){if(!activeOrder)return;const btn=$('saveChanges'),newStatus=$('editStatus').value,newPayment=$('editPayment').value,oldStatus=activeOrder.status,oldPayment=activeOrder.payment_status;if(newStatus===oldStatus&&newPayment===oldPayment){$('detailMessage').textContent='No hay cambios por guardar.';show('detailMessage',true);return}btn.disabled=true;btn.textContent='Guardando…';show('detailMessage',false);
 const patch={status:newStatus,payment_status:newPayment,updated_at:new Date().toISOString()};const {error}=await client.from('orders').update(patch).eq('id',activeOrder.id);if(error){$('detailMessage').textContent='No se guardaron los cambios: '+error.message;$('detailMessage').classList.add('error');show('detailMessage',true);btn.disabled=false;btn.textContent='Guardar cambios';return}
