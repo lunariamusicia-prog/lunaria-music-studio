@@ -63,10 +63,7 @@
     } catch(err) { msg(err.message || 'No fue posible enviar el enlace.',true); }
     finally { busy(false); }
   });
-  sb.auth.getSession().then(async ({data,error})=>{
-    if(error) return;
-    if(data.session?.user) { try { await verifyProfile(data.session.user); } catch(err) { msg(err.message,true); } }
-  });
+  // El formulario siempre se muestra. Solo se redirige tras pulsar «Iniciar sesión».
 })();
 </script>
 </body></html>
