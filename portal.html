@@ -25,7 +25,7 @@
 const URL='https://jqbwtulwjqsnfswtmzkg.supabase.co';
 const KEY='sb_publishable_u8w-v7y-djJkPOtw_YTYRw_LM9NpcqW';
 const FUNCTION_URL=URL+'/functions/v1/lunaria-customer-portal';
-const sb=window.supabase.createClient(URL,KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
+const sb=window.supabase.createClient(URL,KEY,{auth:{storageKey:'lunaria-customer-auth-token',persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
 const $=id=>document.getElementById(id);let currentOrder=null;
 const safe=v=>String(v??'—').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const show=(id,on)=>$(id).classList.toggle('hidden',!on);
@@ -46,13 +46,22 @@ $('openOrder').onclick=openOrder;
 $('requestRevision').onclick=async()=>{if(!currentOrder)return;const feedback=$('feedback').value.trim();const b=$('requestRevision');if(feedback.length<5){msg('revisionMsg','Describe el cambio con al menos 5 caracteres.',true);return}b.disabled=true;try{const result=await call('request_revision',{order_id:currentOrder.id,feedback});if(result.requires_quote){msg('revisionMsg',result.message,true)}else{msg('revisionMsg',`Solicitud registrada. Has utilizado ${result.free_used} de 5 cambios gratuitos.`);$('feedback').value='';const refreshed=await call('open_order',{folio:currentOrder.folio});render(refreshed)}}catch(e){msg('revisionMsg',e.message,true)}finally{b.disabled=false}};
 $('reload').onclick=async()=>{if(!currentOrder)return;try{render(await call('open_order',{folio:currentOrder.folio}))}catch(e){alert(e.message)}};
 $('logout').onclick=async()=>{await sb.auth.signOut();currentOrder=null;show('dashboard',false);show('claim',false);show('login',true)};
-const authCallbackPresent = /(?:access_token|refresh_token|code)=/.test(location.hash + '&' + location.search);
+// Mantiene la sesión del cliente separada de la sesión administrativa.
+// La recuperación del enlace mágico puede terminar después de cargar el HTML;
+// por eso la interfaz también escucha los cambios de autenticación de Supabase.
+sb.auth.onAuthStateChange((event,session)=>{
+  if(session){
+    show('login',false);show('claim',true);
+    if(session.user?.email)$('email').value=session.user.email;
+  }else if(event==='SIGNED_OUT'){
+    currentOrder=null;show('dashboard',false);show('claim',false);show('login',true);
+  }
+});
 async function init(){
-  const {data:{session}}=await sb.auth.getSession();
-  const {data:{user}}=await sb.auth.getUser();
-  if(user?.email)$('email').value=user.email;
-  if(authCallbackPresent && session){show('login',false);show('claim',true)}
-  else{show('login',true);show('claim',false)}
+  const {data:{session},error}=await sb.auth.getSession();
+  if(error){show('login',true);show('claim',false);msg('loginMsg','No se pudo recuperar tu sesión. Solicita un nuevo enlace de acceso.',true);return;}
+  if(session){show('login',false);show('claim',true);if(session.user?.email)$('email').value=session.user.email;}
+  else{show('login',true);show('claim',false);}
 }
 init();
 })();
